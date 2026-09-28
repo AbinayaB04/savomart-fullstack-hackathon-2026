@@ -60,4 +60,26 @@ This document tracks technical decisions, architectural trade-offs, and known is
 ### 11. Partial Failure Resiliency
 - **Decision:** Background evaluation decouples spatial analysis from LLM text generation. If the LLM call times out or fails number validation, the report still succeeds with `summary_source = "template"`. If scoring fails, status is marked `failed` with error details, and `POST /reports/{id}/retry` allows immediate re-evaluation.
 
+---
+
+## Phase 3: Milestone 2, Property Scouting & Pipeline
+
+### 12. Property Evaluation Scoring Architecture
+- **Decision:** Pure deterministic property scoring combines physical specifications with 500m PostGIS spatial catchment:
+  - Commercial & Lease terms (weight: 25): evaluates asking rent per sqft against a zone-specific Chennai market benchmark table (₹55–₹105/sqft/mo). Missing rent is permitted but flags `confidence = "low"`.
+  - Frontage & Road Visibility (weight: 20): $\ge 20\text{ ft}$ optimal for supermarket signage and customer walk-ins; rated 1–5 visibility scale.
+  - Road Width & Parking Access (weight: 15): $\ge 30\text{ ft}$ street width for delivery truck approach and customer ingress, plus on-premise dedicated parking slots.
+  - 500m Catchment Demographics (weight: 20): PostGIS spatial queries counting residential complexes and civic institutions within a 500m radius.
+  - Cannibalisation & Competition (weight: 20): distance to nearest operational Savomart store ($<800\text{ m}$ penalized) and competitor clustering.
+- **Recommendations:** $\ge 70$ = `proceed`, $50-69$ = `review`, $< 50$ = `reject`.
+
+### 13. Spatial Deduplication (50m Buffer + Specification Tolerance)
+- **Decision:** Prevent duplicate submissions from field scouts by checking existing properties within 50 meters using PostGIS `ST_DWithin(location::geography, new_point::geography, 50.0)`.
+- **Tolerance Check:** If distance $\le 50\text{ m}$ AND carpet area or monthly rent is within $\pm 20\%$, the API rejects creation with `HTTP 409 Conflict` and returns potential duplicates. Field scouts can override using `force=true` if onboarding a distinct retail unit in the same complex.
+
+### 14. Pipeline State Machine & Mandatory Reason Audit
+- **Decision:** Property progression follows strict lifecycle transitions:
+  `scouted` $\to$ `under_review` $\to$ `proceed` $\to$ `catchment_study` $\to$ `approved` | `rejected` (also `on_hold`).
+- **Audit Requirement:** Only BD Managers can advance or alter stages. A non-empty text justification (`reason`) is mandatory, and every move appends an immutable row to `property_stage_history`.
+
 

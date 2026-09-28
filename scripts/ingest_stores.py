@@ -133,10 +133,10 @@ def fetch_stores_from_api() -> List[Dict[str, Any]]:
     logger.info(f"Connecting to Stores API: {url}...")
     try:
         with httpx.Client(timeout=10.0) as client:
+            # THIS IS ALREADY A CLEAN GET REQUEST (no data/json body attached)
             resp = client.get(url, headers=headers)
             if resp.status_code == 200:
                 data = resp.json()
-                # Accept list directly or wrapped in data key
                 stores_list = data if isinstance(data, list) else data.get("data", [])
                 logger.info(f"Successfully fetched {len(stores_list)} stores from API.")
                 return stores_list

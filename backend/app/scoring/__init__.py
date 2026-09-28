@@ -10,6 +10,8 @@ from app.scoring.area import (
     normalize_accessibility,
 )
 
+from app.scoring.property import evaluate_property_deterministic, get_rent_benchmark
+
 __all__ = [
     "SCORING_WEIGHTS",
     "THRESHOLDS",
@@ -22,4 +24,6 @@ __all__ = [
     "normalize_cannibalisation",
     "normalize_business",
     "normalize_accessibility",
+    "evaluate_property_deterministic",
+    "get_rent_benchmark",
 ]

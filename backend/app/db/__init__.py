@@ -1,6 +1,25 @@
 from app.db.base import Base
 from app.db.session import engine, SessionLocal, get_db, init_db
-from app.db.models import User, UserRole, GridCell, POI, Store, DataVersion, AreaReport, GeocodeCache
+from app.db.models import (
+    User,
+    UserRole,
+    GridCell,
+    POI,
+    Store,
+    DataVersion,
+    AreaReport,
+    GeocodeCache,
+    Property,
+    PropertyPhoto,
+    PropertyEvaluation,
+    PropertyStageHistory,
+    ScoutAssignment,
+    PropertyStage,
+    ScoutAssignmentStatus,
+    PropertyRecommendation,
+    EvaluationConfidence,
+    ALLOWED_STAGE_TRANSITIONS,
+)
 
 __all__ = [
     "Base",
@@ -16,4 +35,14 @@ __all__ = [
     "DataVersion",
     "AreaReport",
     "GeocodeCache",
+    "Property",
+    "PropertyPhoto",
+    "PropertyEvaluation",
+    "PropertyStageHistory",
+    "ScoutAssignment",
+    "PropertyStage",
+    "ScoutAssignmentStatus",
+    "PropertyRecommendation",
+    "EvaluationConfidence",
+    "ALLOWED_STAGE_TRANSITIONS",
 ]

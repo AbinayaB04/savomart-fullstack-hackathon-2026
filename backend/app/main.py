@@ -42,6 +42,14 @@ app.add_middleware(
     allow_headers=["*", "X-User-Id"],
 )
 
+import os
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+
 # Mount routes at root and /api for convenience
 app.include_router(api_v1_router)
 app.include_router(api_v1_router, prefix="/api")

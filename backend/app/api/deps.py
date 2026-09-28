@@ -32,18 +32,27 @@ def get_current_user(
     return user
 
 
-def require_role(*allowed_roles: UserRole):
+def require_role(*allowed_roles):
     """
     Dependency factory to enforce role-based access control.
+    Supports both variadic args (require_role('bd_manager')) and lists (require_role(['bd_manager'])).
     """
+    flattened = set()
+    for r in allowed_roles:
+        if isinstance(r, (list, tuple, set)):
+            for sub in r:
+                val = sub.value if isinstance(sub, UserRole) else str(sub)
+                flattened.add(val)
+        else:
+            val = r.value if isinstance(r, UserRole) else str(r)
+            flattened.add(val)
+
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
-        user_role = current_user.role
-        if isinstance(user_role, str):
-            user_role = UserRole(user_role)
-        if user_role not in allowed_roles:
+        user_role_val = current_user.role.value if isinstance(current_user.role, UserRole) else str(current_user.role)
+        if user_role_val not in flattened:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access forbidden: role '{current_user.role}' is not authorized for this resource"
+                detail=f"Access forbidden: role '{current_user.role}' is not authorized for this resource. Required: {list(flattened)}"
             )
         return current_user
 
