@@ -1,4 +1,5 @@
 import sys
+import json
 import logging
 import httpx
 from pathlib import Path
@@ -205,7 +206,7 @@ def ingest_stores():
                         "name": name,
                         "address": address,
                         "geom": wkt_geom,
-                        "raw": httpx._utils.to_json(s) if hasattr(httpx, '_utils') else str(s).replace("'", '"'),
+                        "raw": json.dumps(s),
                         "fetched_at": now
                     }
                 )

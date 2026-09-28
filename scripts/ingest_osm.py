@@ -171,24 +171,25 @@ FALLBACK_CHENNAI_POIS = {
 
 
 def query_overpass_category(category: str, query: str) -> Optional[List[Dict[str, Any]]]:
-    """Execute Overpass query with retry and backoff across mirrors."""
-    for attempt in range(1, 4):
-        for server in OVERPASS_SERVERS:
-            try:
-                logger.info(f"Querying Overpass for '{category}' (attempt {attempt}) via {server}...")
-                with httpx.Client(timeout=35.0) as client:
-                    resp = client.post(server, data={"data": query})
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        elements = data.get("elements", [])
-                        logger.info(f"Retrieved {len(elements)} elements for '{category}'.")
-                        return elements
-                    elif resp.status_code in [429, 504]:
-                        logger.warning(f"Overpass server {server} rate-limited or timed out ({resp.status_code}).")
-            except Exception as e:
-                logger.warning(f"Failed query to {server}: {e}")
-            time.sleep(2)
-        time.sleep(attempt * 3)
+    """Execute Overpass query with User-Agent header, timeout, and graceful fallback."""
+    headers = {
+        "User-Agent": "SavoSiteScout/1.0 (retail expansion platform)",
+        "Accept": "application/json"
+    }
+    for server in OVERPASS_SERVERS:
+        try:
+            logger.info(f"Querying Overpass for '{category}' via {server}...")
+            with httpx.Client(timeout=8.0) as client:
+                resp = client.post(server, data={"data": query.strip()}, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    elements = data.get("elements", [])
+                    logger.info(f"Retrieved {len(elements)} elements for '{category}'.")
+                    return elements
+                else:
+                    logger.warning(f"Overpass server {server} responded with status {resp.status_code}")
+        except Exception as e:
+            logger.warning(f"Query to {server} failed: {e}")
     return None
 
 

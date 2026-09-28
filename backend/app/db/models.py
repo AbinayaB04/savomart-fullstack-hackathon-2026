@@ -49,8 +49,6 @@ class GridCell(Base):
     col = Column(Integer, nullable=False, index=True)
 
     __table_args__ = (
-        Index("idx_grid_cells_geom", "geom", postgresql_using="gist"),
-        Index("idx_grid_cells_centroid", "centroid", postgresql_using="gist"),
         Index("idx_grid_cells_row_col", "row", "col", unique=True),
     )
 
@@ -66,7 +64,6 @@ class POI(Base):
     tags = Column(JSONB, nullable=False, default=dict)
 
     __table_args__ = (
-        Index("idx_pois_geom", "geom", postgresql_using="gist"),
         Index("idx_pois_category_osm", "category", "osm_id", unique=True),
     )
 
@@ -81,10 +78,6 @@ class Store(Base):
     geom = Column(Geometry(geometry_type="POINT", srid=4326, spatial_index=True), nullable=False)
     raw = Column(JSONB, nullable=False, default=dict)
     fetched_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-
-    __table_args__ = (
-        Index("idx_stores_geom", "geom", postgresql_using="gist"),
-    )
 
 
 class DataVersion(Base):
