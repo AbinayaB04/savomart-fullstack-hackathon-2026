@@ -1,0 +1,69 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: sitescout_postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-savomart}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-savomart_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-savomart_sitescout}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-savomart} -d ${POSTGRES_DB:-savomart_sitescout}"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sitescout_backend
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+      - ./scripts:/scripts
+      - ./data:/data
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-savomart}:${POSTGRES_PASSWORD:-savomart_secret}@db:5432/${POSTGRES_DB:-savomart_sitescout}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - STORES_API_URL=${STORES_API_URL:-https://internal-service.savomart.in/bridge/api/store/list?is_operational=True}
+      - STORES_API_TOKEN=${STORES_API_TOKEN:-mock_token_for_dev}
+      - LLM_PROVIDER=${LLM_PROVIDER:-none}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CHENNAI_MIN_LAT=${CHENNAI_MIN_LAT:-12.80}
+      - CHENNAI_MAX_LAT=${CHENNAI_MAX_LAT:-13.25}
+      - CHENNAI_MIN_LON=${CHENNAI_MIN_LON:-80.05}
+      - CHENNAI_MAX_LON=${CHENNAI_MAX_LON:-80.35}
+      - PYTHONPATH=/app:/
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sitescout_frontend
+    restart: unless-stopped
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8000}
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
