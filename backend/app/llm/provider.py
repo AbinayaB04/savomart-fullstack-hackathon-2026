@@ -109,15 +109,29 @@ class GeminiProvider(BaseLLMProvider):
         if not self.api_key:
             return ""
         import httpx
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+        # Candidate models to try in order
+        candidate_models = ["gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"]
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.1, "maxOutputTokens": 300}
         }
-        resp = httpx.post(url, json=payload, timeout=8.0)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        for model in candidate_models:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
+                resp = httpx.post(url, json=payload, timeout=6.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    candidates = data.get("candidates", [])
+                    if candidates and "content" in candidates[0]:
+                        parts = candidates[0]["content"].get("parts", [])
+                        if parts and "text" in parts[0]:
+                            return parts[0]["text"].strip()
+                elif resp.status_code in (429, 503):
+                    logger.warning(f"Gemini model {model} rate limited or high demand (HTTP {resp.status_code}).")
+                else:
+                    logger.info(f"Gemini model {model} returned HTTP {resp.status_code}; checking fallback candidate.")
+            except Exception as e:
+                logger.warning(f"Gemini call to {model} failed: {e}")
         return ""
 
 
