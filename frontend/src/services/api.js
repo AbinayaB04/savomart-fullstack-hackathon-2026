@@ -53,4 +53,16 @@ export const api = {
     const qs = params.toString();
     return apiRequest(`/pois${qs ? `?${qs}` : ''}`);
   },
+  geocode: (query) => apiRequest(`/geocode?q=${encodeURIComponent(query)}`),
+  createReport: (cellIds, name) =>
+    apiRequest('/reports', {
+      method: 'POST',
+      body: JSON.stringify({ cell_ids: cellIds, name }),
+    }),
+  getReports: () => apiRequest('/reports'),
+  getReport: (id) => apiRequest(`/reports/${id}`),
+  retryReport: (id) =>
+    apiRequest(`/reports/${id}/retry`, {
+      method: 'POST',
+    }),
 };

@@ -38,3 +38,26 @@ This document tracks technical decisions, architectural trade-offs, and known is
 ### 8. Mock Data Transparency
 - **Rule:** Where public datasets are unavailable or mock data is generated for fallback stores, all records carry `is_mock: true` in API responses, raw JSON properties, and are visually highlighted with amber mock indicators in the UI.
 
+---
+
+## Phase 2: Milestone 1, Area Intelligence
+
+### 9. Area Scoring Architecture & Deterministic Explainability
+- **Decision:** Pure Python functions compute all factors deterministically before applying weights:
+  - Population (weight: 30): derived transparently as `residential_buildings * 4.5 persons`, normalized per sq km.
+  - Competition (weight: 25): supermarket and grocery density evaluated against a balanced commercial viability curve.
+  - Amenities (weight: 15): schools and hospitals per sq km.
+  - Cannibalisation (weight: 15): PostGIS metric distance from centroid to the nearest Savomart store. Proximity < 800m is penalized linearly; distance >= 800m is completely neutral (score 1.0).
+  - Business (weight: 10): commercial office density per sq km.
+  - Accessibility (weight: 5): public transit stops and metro stations per sq km.
+  - Total Score: $0 \le \sum (\text{normalized} \times \text{weight}) \le 100$.
+- **Rating Bands:** $\ge 80$ = Excellent, $65-79$ = Good, $50-64$ = Fair, $< 50$ = Poor.
+
+### 10. Locality & Pincode Geocoding
+- **Decision:** Integrated OpenStreetMap Nominatim with viewbox constrained to Chennai (`[80.05, 12.80, 80.35, 13.25]`).
+- **Policy Compliance:** Maintained strict 1 request/second throttling and persisted all queries in `geocode_cache` table. Pincode searching (e.g. 600042) is resolved via Nominatim address hierarchy.
+
+### 11. Partial Failure Resiliency
+- **Decision:** Background evaluation decouples spatial analysis from LLM text generation. If the LLM call times out or fails number validation, the report still succeeds with `summary_source = "template"`. If scoring fails, status is marked `failed` with error details, and `POST /reports/{id}/retry` allows immediate re-evaluation.
+
+

@@ -1,7 +1,7 @@
 import re
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Set
+from typing import Dict, Any, Set, Tuple
 from app.config import settings
 from app.llm.templates import generate_template_summary
 
@@ -9,8 +9,10 @@ logger = logging.getLogger(__name__)
 
 
 def extract_numbers_from_text(text: str) -> Set[float]:
-    """Extract all integer and floating point numbers from text."""
-    matches = re.findall(r"(?<![a-zA-Z_])[-+]?\d*\.?\d+(?![a-zA-Z_])", text)
+    """Extract all integer and floating point numbers from text, normalizing commas."""
+    # Normalize formatted numbers with commas (e.g. 42,000 -> 42000)
+    cleaned = re.sub(r"(\d),(\d)", r"\1\2", text)
+    matches = re.findall(r"(?<![a-zA-Z_])[-+]?\d*\.?\d+(?![a-zA-Z_])", cleaned)
     nums = set()
     for m in matches:
         try:
@@ -39,8 +41,8 @@ def extract_numbers_from_facts(facts: Dict[str, Any]) -> Set[float]:
             numbers.update(extracted)
 
     _recurse(facts)
-    # Also permit 100 as denominator/max scale and 0/1 base values
-    numbers.update({0.0, 1.0, 100.0})
+    # Also permit 100 as denominator/max scale and base numbers
+    numbers.update({0.0, 1.0, 100.0, 500.0, 800.0})
     return numbers
 
 
@@ -64,122 +66,106 @@ def validate_narrative_numbers(narrative: str, facts: Dict[str, Any]) -> bool:
 
 class BaseLLMProvider(ABC):
     @abstractmethod
-    def generate_narrative(self, facts: Dict[str, Any]) -> str:
-        """Generate narrative text based strictly on provided facts."""
+    def generate(self, prompt: str) -> str:
+        """Low level generation call."""
         pass
+
+    def generate_narrative(self, facts: Dict[str, Any]) -> Tuple[str, str]:
+        """
+        Generate narrative text based strictly on provided facts.
+        Returns Tuple[summary_text, summary_source ('llm' | 'template')].
+        """
+        try:
+            prompt = (
+                "You are an analytical assistant for Savomart retail expansion in Chennai.\n"
+                "Explain the following area fitness score metrics in 3-4 concise, professional sentences.\n"
+                "CRITICAL CONSTRAINT: You MUST NOT invent, estimate, or hallucinate any numbers or percentages.\n"
+                "Use only these numbers. Do not add any other numbers.\n\n"
+                f"FACTS:\n{facts}\n"
+            )
+            raw_text = self.generate(prompt)
+            if raw_text and validate_narrative_numbers(raw_text, facts):
+                return raw_text, "llm"
+            logger.warning("LLM generated invalid numbers or failed validation; falling back to template.")
+        except Exception as e:
+            logger.warning(f"LLM generation failed: {e}; falling back to template.")
+
+        return generate_template_summary(facts), "template"
 
 
 class NoneProvider(BaseLLMProvider):
-    def generate_narrative(self, facts: Dict[str, Any]) -> str:
-        return generate_template_summary(facts)
+    def generate(self, prompt: str) -> str:
+        return ""
+
+    def generate_narrative(self, facts: Dict[str, Any]) -> Tuple[str, str]:
+        return generate_template_summary(facts), "template"
 
 
 class GeminiProvider(BaseLLMProvider):
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    def generate_narrative(self, facts: Dict[str, Any]) -> str:
+    def generate(self, prompt: str) -> str:
         if not self.api_key:
-            return generate_template_summary(facts)
-        try:
-            import httpx
-            prompt = (
-                "You are an analytical assistant for Savomart retail expansion in Chennai.\n"
-                "Explain the following area fitness score metrics in 3-4 concise sentences.\n"
-                "CRITICAL CONSTRAINT: You MUST NOT invent, estimate, or hallucinate any numbers or percentages.\n"
-                "You may ONLY mention the exact numerical values provided below.\n\n"
-                f"FACTS:\n{facts}\n"
-            )
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.1, "maxOutputTokens": 300}
-            }
-            resp = httpx.post(url, json=payload, timeout=8.0)
-            if resp.status_code == 200:
-                data = resp.json()
-                text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                if validate_narrative_numbers(text, facts):
-                    return text
-                logger.warning("Gemini generated invalid numbers; falling back to template.")
-            else:
-                logger.warning(f"Gemini API returned status {resp.status_code}")
-        except Exception as e:
-            logger.warning(f"Gemini generation failed: {e}")
-        return generate_template_summary(facts)
+            return ""
+        import httpx
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={self.api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.1, "maxOutputTokens": 300}
+        }
+        resp = httpx.post(url, json=payload, timeout=8.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        return ""
 
 
 class OpenAIProvider(BaseLLMProvider):
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    def generate_narrative(self, facts: Dict[str, Any]) -> str:
+    def generate(self, prompt: str) -> str:
         if not self.api_key:
-            return generate_template_summary(facts)
-        try:
-            import httpx
-            prompt = (
-                "You are an analytical assistant for Savomart retail expansion in Chennai.\n"
-                "Explain the following area fitness metrics in 3-4 concise sentences.\n"
-                "CRITICAL CONSTRAINT: You MUST NOT invent, extrapolate, or hallucinate any numbers.\n"
-                "You may ONLY use exact numbers from the facts below.\n\n"
-                f"FACTS:\n{facts}\n"
-            )
-            headers = {"Authorization": f"Bearer {self.api_key}"}
-            payload = {
-                "model": "gpt-4o-mini",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.1,
-                "max_tokens": 300
-            }
-            resp = httpx.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=8.0)
-            if resp.status_code == 200:
-                data = resp.json()
-                text = data["choices"][0]["message"]["content"].strip()
-                if validate_narrative_numbers(text, facts):
-                    return text
-                logger.warning("OpenAI generated invalid numbers; falling back to template.")
-        except Exception as e:
-            logger.warning(f"OpenAI generation failed: {e}")
-        return generate_template_summary(facts)
+            return ""
+        import httpx
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.1,
+            "max_tokens": 300
+        }
+        resp = httpx.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=8.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data["choices"][0]["message"]["content"].strip()
+        return ""
 
 
 class AnthropicProvider(BaseLLMProvider):
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    def generate_narrative(self, facts: Dict[str, Any]) -> str:
+    def generate(self, prompt: str) -> str:
         if not self.api_key:
-            return generate_template_summary(facts)
-        try:
-            import httpx
-            prompt = (
-                "You are an analytical assistant for Savomart retail expansion in Chennai.\n"
-                "Explain the following area fitness metrics in 3-4 concise sentences.\n"
-                "CRITICAL CONSTRAINT: You MUST NOT invent or hallucinate numbers.\n"
-                "You may ONLY use exact numbers from the facts below.\n\n"
-                f"FACTS:\n{facts}\n"
-            )
-            headers = {
-                "x-api-key": self.api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
-            }
-            payload = {
-                "model": "claude-3-haiku-20240307",
-                "max_tokens": 300,
-                "messages": [{"role": "user", "content": prompt}]
-            }
-            resp = httpx.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload, timeout=8.0)
-            if resp.status_code == 200:
-                data = resp.json()
-                text = data["content"][0]["text"].strip()
-                if validate_narrative_numbers(text, facts):
-                    return text
-                logger.warning("Anthropic generated invalid numbers; falling back to template.")
-        except Exception as e:
-            logger.warning(f"Anthropic generation failed: {e}")
-        return generate_template_summary(facts)
+            return ""
+        import httpx
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json"
+        }
+        payload = {
+            "model": "claude-3-haiku-20240307",
+            "max_tokens": 300,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+        resp = httpx.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload, timeout=8.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data["content"][0]["text"].strip()
+        return ""
 
 
 def get_llm_provider() -> BaseLLMProvider:
