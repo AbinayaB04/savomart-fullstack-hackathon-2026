@@ -6,14 +6,6 @@ It integrates macro-market territory analysis, on-ground mobile property scoutin
 
 ---
 
-## Demonstration Video (3 to 5 Minutes)
-
-> **Google Drive Link:** [https://drive.google.com/file/d/1zryiAopUNhub8CDdK3GvugbgEJ2OaExN/view?usp=sharing](https://drive.google.com/file/d/1zryiAopUNhub8CDdK3GvugbgEJ2OaExN/view?usp=sharing)  
-> *(Sharing set to: "Anyone with the link can view")*  
-> Walkthrough covers: All 4 organizational personas, 1-click 6-month spatial reuse, offline mobile surveys, and automated Ground-Truth property re-evaluation.
-
----
-
 ## System Architecture
 
 - **Frontend Client:** React 18 + Vite with Tailwind CSS, providing desktop Leaflet mapping for BD and Survey Managers alongside responsive mobile-optimized interfaces for field scouts and lane surveyors.
@@ -100,12 +92,7 @@ docker compose exec backend python /scripts/seed_demo.py
 
 ---
 
-<<<<<<< HEAD
-## Personas & Workspaces
-Savo SiteScout features 4 distinct role-tailored workspaces. No passwords needed: switch personas instantly using the header dropdown, which sets `X-User-Id` on all requests.
-=======
 ### 5. Open the Platform in Your Browser
->>>>>>> 94bd661 (ai sessions transcripts and update readme architecture)
 
 * **Frontend Web Application:** [http://localhost:5175](http://localhost:5175)
 * **Backend Interactive API Docs (Swagger):** [http://localhost:8005/docs](http://localhost:8005/docs)
@@ -113,11 +100,7 @@ Savo SiteScout features 4 distinct role-tailored workspaces. No passwords needed
 
 ---
 
-<<<<<<< HEAD
-## Geospatial Focus & Data Rules
-=======
 ### 6. Run the Automated Test Suite
->>>>>>> 94bd661 (ai sessions transcripts and update readme architecture)
 
 Verify that all spatial algorithms, reuse rules, and LPT task balancers pass:
 
@@ -128,10 +111,7 @@ docker compose exec backend pytest -v
 
 ---
 
-<<<<<<< HEAD
-## API Endpoints (Phase 1)
-=======
-### 2-Minute Verification Tour (What to Click First)
+### 7. 2-Minute Verification Tour (What to Click First)
 
 Once you open [http://localhost:5175](http://localhost:5175), here is the quickest way to verify the entire system:
 
@@ -234,92 +214,7 @@ Savo SiteScout implements simulated, zero-password authentication. The active pe
 
 ## Data Models & Schema
 
-The relational schema is implemented in PostgreSQL 16 using PostGIS extensions (all geometries stored in **SRID 4326** with GIST indexes).
-
-```mermaid
-erDiagram
-    USERS ||--o{ SCOUT_ASSIGNMENTS : receives
-    USERS ||--o{ PROPERTIES : onboards
-    USERS ||--o{ PROPERTY_STAGE_HISTORY : audits
-    USERS ||--o{ STUDY_REQUESTS : requests
-    USERS ||--o{ SURVEY_TASKS : executes
-    
-    AREA_REPORTS ||--o{ SCOUT_ASSIGNMENTS : generates_hotspot
-    SCOUT_ASSIGNMENTS ||--o{ PROPERTIES : results_in
-    PROPERTIES ||--o{ PROPERTY_PHOTOS : contains
-    PROPERTIES ||--o{ PROPERTY_EVALUATIONS : versioned_by
-    PROPERTIES ||--o{ PROPERTY_STAGE_HISTORY : tracks_lifecycle
-    PROPERTIES ||--o{ STUDY_REQUESTS : targets
-
-    STUDY_REQUESTS ||--o{ SURVEY_TASKS : splits_into
-    SURVEY_TASKS ||--o{ SURVEY_RESPONSES : answered_by
-
-    GRID_CELLS {
-        int id PK
-        geometry geom_polygon "500m Box (SRID 4326)"
-        geometry centroid_point "Centroid (SRID 4326)"
-    }
-
-    POIS {
-        string id PK
-        string name
-        string category "supermarket|grocery|school|hospital|bus_stop|etc"
-        geometry location "Point (SRID 4326)"
-        jsonb tags
-    }
-
-    STORES {
-        string id PK
-        string name
-        string code
-        geometry location "Point (SRID 4326)"
-        boolean is_operational
-        boolean is_mock
-    }
-
-    PROPERTIES {
-        string id PK
-        string title
-        geometry location "Point (SRID 4326)"
-        text address
-        float rent_monthly
-        float deposit
-        float area_sqft
-        float frontage_ft
-        float road_width_ft
-        boolean parking
-        int parking_slots
-        int visibility "1 to 5 scale"
-        string stage "scouted|under_review|proceed|catchment_study|approved|rejected|on_hold"
-        string created_by FK
-    }
-
-    PROPERTY_EVALUATIONS {
-        string id PK
-        string property_id FK
-        int version "1, 2... Incremental"
-        float score "0 to 100"
-        string recommendation "proceed|review|reject"
-        string confidence "high|medium|low"
-        jsonb breakdown
-        jsonb insights
-        text summary
-        string summary_source "llm|template"
-    }
-
-    STUDY_REQUESTS {
-        string id PK
-        string target_type "property|area"
-        string property_id FK
-        string requested_by FK
-        float radius_m "Default 1000m"
-        string status "requested|planned|in_progress|completed"
-        string reused_from_request_id FK
-        string reuse_reason
-        jsonb insights "Rolled-up metrics"
-        geometry geom "Covered footprint"
-    }
-```
+The relational data model is built on PostgreSQL 16 with PostGIS (SRID 4326), indexing 6,666 pre-computed 500m Chennai grid cells, 2,216 OpenStreetMap points of interest across 9 retail categories, and Savomart operational store buffers with spatial GIST indices for instantaneous geometric joins. Candidate properties onboarded from mobile devices maintain structured physical attributes, commercial lease metrics, 50-meter spatial deduplication references, versioned multi-factor evaluations, and an immutable audit trail tracking pipeline lifecycle transitions. Survey operations are modeled through 1,000m radius catchment study requests that decompose into non-overlapping 500m grid cell tasks balanced via Longest-Processing-Time bin packing, which roll up into ground-truth pedestrian footfall and retail mix insights upon lane completion.
 
 ---
 
@@ -502,4 +397,12 @@ A comprehensive Architecture Decision Record (ADR) detailing all 15 technical de
 
 - **AI Pair Programmer:** Google DeepMind Advanced Agentic Coding (`Antigravity IDE` / Gemini).
 - **Session Audit Trails:** Complete conversation transcripts, trajectory logs, and tool execution traces are documented in [`ai-sessions/Savo SiteScout Development Setup.md`](ai-sessions/Savo%20SiteScout%20Development%20Setup.md).
+
+---
+## Demonstration Video (3 to 5 Minutes)
+
+> **Google Drive Link:** [https://drive.google.com/file/d/1zryiAopUNhub8CDdK3GvugbgEJ2OaExN/view?usp=sharing](https://drive.google.com/file/d/1zryiAopUNhub8CDdK3GvugbgEJ2OaExN/view?usp=sharing)  
+
+
+---
 
