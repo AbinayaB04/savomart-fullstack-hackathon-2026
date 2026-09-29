@@ -7,6 +7,7 @@ import BDManagerDashboard from './pages/BDManagerDashboard';
 import BDExecutiveDashboard from './pages/BDExecutiveDashboard';
 import SurveyManagerDashboard from './pages/SurveyManagerDashboard';
 import SurveyExecutiveDashboard from './pages/SurveyExecutiveDashboard';
+import MobileDeviceFrame from './components/MobileDeviceFrame';
 
 function RoleHome() {
   const { currentUser, loading, error } = useAuth();
@@ -47,11 +48,19 @@ function RoleHome() {
     case 'bd_manager':
       return <BDManagerDashboard />;
     case 'bd_executive':
-      return <BDExecutiveDashboard />;
+      return (
+        <MobileDeviceFrame title="BD Executive Mobile App">
+          <BDExecutiveDashboard />
+        </MobileDeviceFrame>
+      );
     case 'survey_manager':
       return <SurveyManagerDashboard />;
     case 'survey_executive':
-      return <SurveyExecutiveDashboard />;
+      return (
+        <MobileDeviceFrame title="Survey Executive Mobile App">
+          <SurveyExecutiveDashboard />
+        </MobileDeviceFrame>
+      );
     default:
       return <BDManagerDashboard />;
   }
@@ -61,9 +70,9 @@ export default function App() {
   return (
     <AuthProvider>
       <Router>
-        <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+        <div className="min-h-screen bg-slate-50 flex flex-col font-sans overflow-x-hidden w-full">
           <Header />
-          <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+          <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8">
             <Routes>
               <Route path="/" element={<RoleHome />} />
               <Route path="*" element={<Navigate to="/" replace />} />

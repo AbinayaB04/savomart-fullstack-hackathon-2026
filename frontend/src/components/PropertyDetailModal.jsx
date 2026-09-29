@@ -62,18 +62,59 @@ export default function PropertyDetailModal({ property, onClose, onPropertyUpdat
   const [isMovingStage, setIsMovingStage] = useState(false);
   const [targetStage, setTargetStage] = useState('');
   const [stageReason, setStageReason] = useState('');
-  const [submittingStage, setSubmittingStage] = useState(false);
   const [reevaluating, setReevaluating] = useState(false);
   const [error, setError] = useState(null);
   const [activePhoto, setActivePhoto] = useState(null);
+  const [requestingStudy, setRequestingStudy] = useState(false);
+  const [reuseBanner, setReuseBanner] = useState(null);
 
   const evaluations = activeProperty.evaluations || [];
   const currentEval = evaluations[selectedVersionIdx] || activeProperty.latest_evaluation;
   const photos = activeProperty.photos || [];
   const history = activeProperty.stage_history || [];
   const duplicates = activeProperty.nearby_duplicates || [];
+  const catchmentStudy = activeProperty.catchment_study;
 
   const allowedNextStages = ALLOWED_TRANSITIONS[activeProperty.stage] || [];
+
+  const handleRequestCatchmentStudy = async () => {
+    try {
+      setRequestingStudy(true);
+      setError(null);
+      setReuseBanner(null);
+
+      const res = await api.createStudy({
+        target_type: 'property',
+        property_id: activeProperty.id,
+        radius_m: 1000.0,
+      });
+
+      // Re-fetch fresh property data to get updated evaluations and catchment study
+      const freshProp = await api.getProperty(activeProperty.id);
+      setActiveProperty(freshProp);
+      setSelectedVersionIdx(0);
+      if (onPropertyUpdated) onPropertyUpdated(freshProp);
+
+      if (res.reused) {
+        setReuseBanner({
+          isReused: true,
+          message: res.reuse_message || `Reused study #${res.id}`,
+          details: '6-Month Spatial Reuse rule applied (DECISIONS.md #15). Existing completed catchment study covered this location within 300m and was completed within 180 days. Insights copied and evaluation updated automatically without creating new tasks.',
+        });
+      } else {
+        setReuseBanner({
+          isReused: false,
+          message: `Catchment study #${res.id} requested successfully.`,
+          details: 'Study request has been dispatched to Survey Operations inbox for 500m grid cell splitting and balanced executive assignment.',
+        });
+      }
+    } catch (err) {
+      console.error('Failed to request catchment study:', err);
+      setError(err.message || 'Failed to request catchment study.');
+    } finally {
+      setRequestingStudy(false);
+    }
+  };
 
   const handleMoveStage = async (e) => {
     e.preventDefault();
@@ -118,6 +159,7 @@ export default function PropertyDetailModal({ property, onClose, onPropertyUpdat
       setReevaluating(false);
     }
   };
+
 
   return (
     <div className="fixed inset-0 z-[2400] flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm animate-fade-in overflow-y-auto">
@@ -286,11 +328,169 @@ export default function PropertyDetailModal({ property, onClose, onPropertyUpdat
             </div>
           )}
 
+          {/* 6-Month Spatial Reuse or Study Request Notice Banner */}
+          {reuseBanner && (
+            <div className={`p-4 rounded-2xl border text-xs space-y-1.5 animate-fade-in ${
+              reuseBanner.isReused
+                ? 'bg-amber-50 border-amber-300 text-amber-900'
+                : 'bg-purple-50 border-purple-200 text-purple-900'
+            }`}>
+              <div className="flex items-center space-x-2 font-black text-sm">
+                <Sparkles className="w-4 h-4 text-brand-purple" />
+                <span>{reuseBanner.message}</span>
+              </div>
+              <p className="text-xs opacity-90">{reuseBanner.details}</p>
+            </div>
+          )}
+
+          {/* Catchment Study Operations & Survey Ground Truth Card */}
+          {catchmentStudy && (
+            <div className="bg-gradient-to-br from-purple-50/70 to-amber-50/40 border-2 border-brand-purple/20 rounded-3xl p-5 sm:p-6 space-y-4 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-100 pb-3">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider bg-brand-purple text-brand-yellow">
+                      Catchment Study Operations
+                    </span>
+                    <span className="text-xs font-bold text-gray-500">#{catchmentStudy.id}</span>
+                  </div>
+                  <h3 className="text-base font-extrabold text-gray-900">
+                    Field Survey Ground-Truth Intelligence
+                  </h3>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  {catchmentStudy.reused_from_request_id && (
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center space-x-1">
+                      <span>⚡ 6-Mo Spatial Reuse</span>
+                    </span>
+                  )}
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-wider ${
+                    catchmentStudy.status === 'completed'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-blue-100 text-blue-800 border border-blue-200'
+                  }`}>
+                    {catchmentStudy.status}
+                  </span>
+                </div>
+              </div>
+
+              {catchmentStudy.reuse_reason && (
+                <div className="p-3 bg-white/80 border border-amber-200 rounded-xl text-xs text-amber-900 font-semibold flex items-center space-x-2">
+                  <span className="text-amber-600 font-black">⚡ Reuse Audit:</span>
+                  <span>{catchmentStudy.reuse_reason}</span>
+                </div>
+              )}
+
+              {/* Rolled-up Survey Insights */}
+              {catchmentStudy.insights && Object.keys(catchmentStudy.insights).length > 0 ? (
+                <div className="space-y-3.5">
+                  <p className="text-xs sm:text-sm text-gray-800 font-medium leading-relaxed bg-white/70 p-3 rounded-xl border border-purple-100">
+                    {catchmentStudy.insights.summary}
+                  </p>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xl/5">
+                      <span className="text-gray-500 font-bold block">10-Min Footfall</span>
+                      <div className="text-base font-black text-brand-purple mt-0.5">
+                        {catchmentStudy.insights.avg_footfall_10min || 0} avg
+                      </div>
+                      <span className="text-[10px] text-gray-400">Total: {catchmentStudy.insights.total_footfall_10min || 0}</span>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xl/5">
+                      <span className="text-gray-500 font-bold block">Peak-Hour Footfall</span>
+                      <div className="text-base font-black text-emerald-600 mt-0.5">
+                        ~{catchmentStudy.insights.avg_peak_hour_estimate || 0} /hr
+                      </div>
+                      <span className="text-[10px] text-gray-400">Ground verified</span>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xl/5">
+                      <span className="text-gray-500 font-bold block">Competitors Seen</span>
+                      <div className="text-base font-black text-rose-600 mt-0.5">
+                        {catchmentStudy.insights.competitor_count || 0} Outlets
+                      </div>
+                      <span className="text-[10px] text-gray-400">In immediate lanes</span>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-xl border border-gray-200 shadow-2xl/5">
+                      <span className="text-gray-500 font-bold block">Dominant Housing</span>
+                      <div className="text-base font-black text-gray-900 mt-0.5 capitalize">
+                        {catchmentStudy.insights.dominant_household_type || 'Mixed'}
+                      </div>
+                      <span className="text-[10px] text-gray-400">Catchment demographic</span>
+                    </div>
+                  </div>
+
+                  {/* Lane Suitability & Shop Mix */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-white rounded-xl border border-gray-200 space-y-1.5">
+                      <span className="font-bold text-gray-700">Lane Suitability</span>
+                      <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                        <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-800 font-semibold">
+                          Avg Lane Width: {catchmentStudy.insights.avg_lane_width_ft || 0} ft
+                        </span>
+                        <span className="px-2 py-0.5 bg-gray-100 rounded text-gray-800 font-semibold">
+                          Street Lighting: {catchmentStudy.insights.street_lighting_pct || 0}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-white rounded-xl border border-gray-200 space-y-1.5">
+                      <span className="font-bold text-gray-700">Retail & Shop Mix</span>
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px]">
+                        {catchmentStudy.insights.shop_mix && Object.entries(catchmentStudy.insights.shop_mix).map(([type, count]) => (
+                          <span key={type} className="px-2 py-0.5 bg-purple-50 text-brand-purple rounded-md font-bold border border-purple-100 capitalize">
+                            {type}: {count}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Competitor Stores List */}
+                  {catchmentStudy.insights.competitors && catchmentStudy.insights.competitors.length > 0 && (
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        Ground-Surveyed Competitor Outlets ({catchmentStudy.insights.competitors.length})
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {catchmentStudy.insights.competitors.map((comp, idx) => (
+                          <div key={idx} className="p-2 bg-white rounded-lg border border-gray-200 text-xs flex items-center space-x-2 shadow-sm">
+                            <span className="font-bold text-gray-900">{comp.name}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 rounded text-gray-600 capitalize">{comp.type || 'grocery'}</span>
+                            {comp.approx_size && <span className="text-[10px] text-gray-400">({comp.approx_size})</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-600 font-semibold">Field Survey Progress:</span>
+                    <span className="font-extrabold text-brand-purple">
+                      {catchmentStudy.submitted_tasks} of {catchmentStudy.total_tasks} tasks submitted ({catchmentStudy.progress_percent}%)
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-brand-purple transition-all duration-500 rounded-full"
+                      style={{ width: `${catchmentStudy.progress_percent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Evaluation Narrative & Version Control */}
           {currentEval && (
             <div className="bg-purple-50/40 border border-brand-purple/20 rounded-3xl p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-bold text-brand-purple uppercase tracking-wider flex items-center space-x-1">
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>Executive Evaluation Summary</span>
@@ -298,6 +498,11 @@ export default function PropertyDetailModal({ property, onClose, onPropertyUpdat
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-brand-yellow text-brand-purple border border-brand-yellow">
                     {currentEval.summary_source === 'llm' ? 'AI Synthesized' : 'Deterministic Template'}
                   </span>
+                  {(currentEval.version > 1 || currentEval.breakdown?.catchment?.survey_validated || catchmentStudy?.status === 'completed') && (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center space-x-1 shadow-sm">
+                      <span>Updated after catchment study</span>
+                    </span>
+                  )}
                 </div>
 
                 {/* Version Selector */}
@@ -311,7 +516,7 @@ export default function PropertyDetailModal({ property, onClose, onPropertyUpdat
                     >
                       {evaluations.map((ev, i) => (
                         <option key={ev.id} value={i}>
-                          v{ev.version} ({new Date(ev.created_at).toLocaleDateString()}) - {ev.score} pts
+                          v{ev.version} ({new Date(ev.created_at).toLocaleDateString()}) - {ev.score} pts {i === 0 && ev.version > 1 ? '(Post-Survey)' : ''}
                         </option>
                       ))}
                     </select>
@@ -360,6 +565,7 @@ export default function PropertyDetailModal({ property, onClose, onPropertyUpdat
             </div>
           )}
 
+
           {/* Audit Stage History Timeline */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center space-x-1.5">
@@ -390,7 +596,7 @@ export default function PropertyDetailModal({ property, onClose, onPropertyUpdat
 
         {/* Sticky Action Footer */}
         <div className="p-4 sm:p-5 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleReevaluate}
               disabled={reevaluating}
@@ -399,7 +605,18 @@ export default function PropertyDetailModal({ property, onClose, onPropertyUpdat
               <RefreshCw className={`w-3.5 h-3.5 ${reevaluating ? 'animate-spin' : ''}`} />
               <span>{reevaluating ? 'Re-scoring...' : 'Re-evaluate Site'}</span>
             </button>
+
+            <button
+              id="btn-request-catchment-study"
+              onClick={handleRequestCatchmentStudy}
+              disabled={requestingStudy}
+              className="px-4 py-2 text-xs font-black text-brand-purple bg-brand-yellow hover:bg-yellow-400 border border-brand-yellow rounded-xl shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${requestingStudy ? 'animate-spin' : ''}`} />
+              <span>{requestingStudy ? 'Checking 6-Mo Reuse...' : 'Request Catchment Study'}</span>
+            </button>
           </div>
+
 
           <div className="flex items-center space-x-3">
             {allowedNextStages.length > 0 && (

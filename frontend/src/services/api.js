@@ -103,5 +103,48 @@ export const api = {
     apiRequest(`/properties/${id}/evaluate`, {
       method: 'POST',
     }),
+
+  // Phase 4: Milestone 3 Catchment Studies & Field Operations
+  createStudy: ({ target_type, property_id, report_id, radius_m = 1000.0 }) =>
+    apiRequest('/studies', {
+      method: 'POST',
+      body: JSON.stringify({ target_type, property_id, report_id, radius_m }),
+    }),
+  getStudies: (status, target_type) => {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (target_type) params.append('target_type', target_type);
+    const qs = params.toString();
+    return apiRequest(`/studies${qs ? `?${qs}` : ''}`);
+  },
+  getStudy: (id) => apiRequest(`/studies/${id}`),
+  planStudy: (id) =>
+    apiRequest(`/studies/${id}/plan`, {
+      method: 'POST',
+    }),
+  autoAssignStudy: (id) =>
+    apiRequest(`/studies/${id}/auto-assign`, {
+      method: 'POST',
+    }),
+  getStudyProgress: (id) => apiRequest(`/studies/${id}/progress`),
+  rollupStudy: (id) =>
+    apiRequest(`/studies/${id}/rollup`, {
+      method: 'POST',
+    }),
+
+  // Phase 4: Survey Tasks
+  getMyTasks: () => apiRequest('/tasks/mine'),
+  getTask: (id) => apiRequest(`/tasks/${id}`),
+  assignTask: (id, assigned_to) =>
+    apiRequest(`/tasks/${id}/assign`, {
+      method: 'PATCH',
+      body: JSON.stringify({ assigned_to }),
+    }),
+  submitTaskResponse: (id, data) =>
+    apiRequest(`/tasks/${id}/responses`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 };
+
 
