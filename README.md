@@ -107,7 +107,6 @@ Verify that all spatial algorithms, reuse rules, and LPT task balancers pass:
 ```bash
 docker compose exec backend pytest -v
 ```
-*(All 11 unit tests will run and pass in ~4 seconds).*
 
 ---
 
@@ -399,7 +398,7 @@ A comprehensive Architecture Decision Record (ADR) detailing all 15 technical de
 - **Session Audit Trails:** Complete conversation transcripts, trajectory logs, and tool execution traces are documented in [`ai-sessions/Savo SiteScout Development Setup.md`](ai-sessions/Savo%20SiteScout%20Development%20Setup.md).
 
 ---
-## Demonstration Video (3 to 5 Minutes)
+## Demonstration Video
 
 > **Google Drive Link:** [https://drive.google.com/file/d/1zryiAopUNhub8CDdK3GvugbgEJ2OaExN/view?usp=sharing](https://drive.google.com/file/d/1zryiAopUNhub8CDdK3GvugbgEJ2OaExN/view?usp=sharing)  
 
