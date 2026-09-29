@@ -4,7 +4,7 @@
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Prerequisites
 - Docker & Docker Compose
@@ -40,7 +40,7 @@ bash scripts/setup_all.sh
 
 ---
 
-## 👥 Personas & Workspaces
+## Personas & Workspaces
 Savo SiteScout features 4 distinct role-tailored workspaces. No passwords needed: switch personas instantly using the header dropdown, which sets `X-User-Id` on all requests.
 
 | Persona | Form Factor | Responsibility & Workspace |
@@ -52,7 +52,7 @@ Savo SiteScout features 4 distinct role-tailored workspaces. No passwords needed
 
 ---
 
-## 🗺️ Geospatial Focus & Data Rules
+## Geospatial Focus & Data Rules
 
 - **Chennai Bounding Box:** Lat `12.80` to `13.25`, Lon `80.05` to `80.35`. Any coordinates outside this box are rejected.
 - **500m Scouting Mesh:** Uniform 500m x 500m grid cells pre-computed and indexed with PostGIS GIST indexes for instant spatial querying.
@@ -62,7 +62,7 @@ Savo SiteScout features 4 distinct role-tailored workspaces. No passwords needed
 
 ---
 
-## 📡 API Endpoints (Phase 1)
+## API Endpoints (Phase 1)
 
 - `GET /health`: System health and Chennai bounding box confirmation
 - `GET /users`: List all 8 seeded users across 4 personas
