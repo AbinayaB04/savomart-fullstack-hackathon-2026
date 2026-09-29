@@ -3,7 +3,7 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql://savomart:savomart_secret@localhost:5432/savomart_sitescout"
+    DATABASE_URL: str = "postgresql://savomart:savomart_secret@localhost:5438/savomart_sitescout"
     ENVIRONMENT: str = "development"
 
     # External APIs
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     CHENNAI_MAX_LON: float = 80.35
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore"
     )

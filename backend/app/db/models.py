@@ -56,6 +56,24 @@ class EvaluationConfidence(str, enum.Enum):
     LOW = "low"
 
 
+class StudyTargetType(str, enum.Enum):
+    PROPERTY = "property"
+    AREA = "area"
+
+
+class StudyStatus(str, enum.Enum):
+    REQUESTED = "requested"
+    PLANNED = "planned"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+
+
+class SurveyTaskStatus(str, enum.Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    SUBMITTED = "submitted"
+
+
 # Valid state machine transitions for property pipeline stages
 ALLOWED_STAGE_TRANSITIONS = {
     PropertyStage.SCOUTED: [PropertyStage.UNDER_REVIEW, PropertyStage.REJECTED, PropertyStage.ON_HOLD],
@@ -372,4 +390,124 @@ class PropertyStageHistory(Base):
             "changed_by_name": self.user.name if self.user else self.changed_by,
             "reason": self.reason,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class StudyRequest(Base):
+    __tablename__ = "study_requests"
+
+    id = Column(String(50), primary_key=True)
+    target_type = Column(SQLEnum(StudyTargetType, name="study_target_type_enum", create_type=True), nullable=False)
+    property_id = Column(String(50), ForeignKey("properties.id"), nullable=True, index=True)
+    report_id = Column(String(50), ForeignKey("area_reports.id"), nullable=True, index=True)
+    requested_by = Column(String(50), ForeignKey("users.id"), nullable=False)
+    radius_m = Column(Float, nullable=False, default=1000.0)
+    status = Column(SQLEnum(StudyStatus, name="study_status_enum", create_type=True), nullable=False, default=StudyStatus.REQUESTED, index=True)
+    reused_from_request_id = Column(String(50), ForeignKey("study_requests.id"), nullable=True, index=True)
+    reuse_reason = Column(String(255), nullable=True)
+    insights = Column(JSONB, nullable=True, default=dict)
+    geom = Column(Geometry(geometry_type="GEOMETRY", srid=4326, spatial_index=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    requester = relationship("User", foreign_keys=[requested_by])
+    property = relationship("Property", foreign_keys=[property_id])
+    report = relationship("AreaReport", foreign_keys=[report_id])
+    tasks = relationship("SurveyTask", back_populates="request", cascade="all, delete-orphan", order_by="SurveyTask.cell_id")
+
+    def to_dict(self, include_tasks=False):
+        total_tasks = len(self.tasks) if self.tasks else 0
+        submitted_tasks = sum(1 for t in self.tasks if t.status == SurveyTaskStatus.SUBMITTED) if self.tasks else 0
+        progress_pct = round((submitted_tasks / total_tasks * 100), 1) if total_tasks > 0 else (100.0 if self.status == StudyStatus.COMPLETED else 0.0)
+
+        data = {
+            "id": self.id,
+            "target_type": self.target_type.value if isinstance(self.target_type, StudyTargetType) else self.target_type,
+            "property_id": self.property_id,
+            "property_title": self.property.title if self.property else None,
+            "report_id": self.report_id,
+            "report_name": self.report.name if self.report else None,
+            "requested_by": self.requested_by,
+            "requested_by_name": self.requester.name if self.requester else self.requested_by,
+            "radius_m": self.radius_m,
+            "status": self.status.value if isinstance(self.status, StudyStatus) else self.status,
+            "reused_from_request_id": self.reused_from_request_id,
+            "reuse_reason": self.reuse_reason,
+            "insights": self.insights,
+            "total_tasks": total_tasks,
+            "submitted_tasks": submitted_tasks,
+            "progress_percent": progress_pct,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+        if include_tasks:
+            data["tasks"] = [t.to_dict() for t in self.tasks]
+
+        return data
+
+
+class SurveyTask(Base):
+    __tablename__ = "survey_tasks"
+
+    id = Column(String(50), primary_key=True)
+    request_id = Column(String(50), ForeignKey("study_requests.id", ondelete="CASCADE"), nullable=False, index=True)
+    cell_id = Column(Integer, ForeignKey("grid_cells.id"), nullable=False, index=True)
+    geom = Column(Geometry(geometry_type="POLYGON", srid=4326, spatial_index=True), nullable=True)
+    assigned_to = Column(String(50), ForeignKey("users.id"), nullable=True, index=True)
+    status = Column(SQLEnum(SurveyTaskStatus, name="survey_task_status_enum", create_type=True), nullable=False, default=SurveyTaskStatus.PENDING, index=True)
+    workload_weight = Column(Float, nullable=False, default=1.0)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    request = relationship("StudyRequest", back_populates="tasks")
+    assignee = relationship("User", foreign_keys=[assigned_to])
+    cell = relationship("GridCell", foreign_keys=[cell_id])
+    responses = relationship("SurveyResponse", back_populates="task", cascade="all, delete-orphan", order_by="SurveyResponse.submitted_at.desc()")
+
+    def to_dict(self):
+        polygon = to_shape(self.geom) if self.geom is not None else None
+        coords = []
+        if polygon and hasattr(polygon, "exterior"):
+            coords = [[pt[1], pt[0]] for pt in polygon.exterior.coords]  # [lat, lon] for Leaflet
+
+        centroid = to_shape(self.cell.centroid) if (self.cell and self.cell.centroid is not None) else None
+
+        return {
+            "id": self.id,
+            "request_id": self.request_id,
+            "cell_id": self.cell_id,
+            "coordinates": coords,
+            "centroid": [centroid.y, centroid.x] if centroid else None,
+            "assigned_to": self.assigned_to,
+            "assigned_to_name": self.assignee.name if self.assignee else "Unassigned",
+            "status": self.status.value if isinstance(self.status, SurveyTaskStatus) else self.status,
+            "workload_weight": round(self.workload_weight, 2),
+            "response_count": len(self.responses) if self.responses else 0,
+            "latest_response": self.responses[0].to_dict() if self.responses else None,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class SurveyResponse(Base):
+    __tablename__ = "survey_responses"
+
+    id = Column(String(50), primary_key=True)
+    task_id = Column(String(50), ForeignKey("survey_tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    data = Column(JSONB, nullable=False, default=dict)
+    photos = Column(JSONB, nullable=False, default=list)
+    captured_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    submitted_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    client_uuid = Column(String(100), unique=True, index=True, nullable=False)
+
+    task = relationship("SurveyTask", back_populates="responses")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "task_id": self.task_id,
+            "data": self.data,
+            "photos": self.photos,
+            "captured_at": self.captured_at.isoformat() if self.captured_at else None,
+            "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
+            "client_uuid": self.client_uuid,
         }

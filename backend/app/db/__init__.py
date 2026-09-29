@@ -19,6 +19,12 @@ from app.db.models import (
     PropertyRecommendation,
     EvaluationConfidence,
     ALLOWED_STAGE_TRANSITIONS,
+    StudyRequest,
+    SurveyTask,
+    SurveyResponse,
+    StudyTargetType,
+    StudyStatus,
+    SurveyTaskStatus,
 )
 
 __all__ = [
@@ -45,4 +51,10 @@ __all__ = [
     "PropertyRecommendation",
     "EvaluationConfidence",
     "ALLOWED_STAGE_TRANSITIONS",
+    "StudyRequest",
+    "SurveyTask",
+    "SurveyResponse",
+    "StudyTargetType",
+    "StudyStatus",
+    "SurveyTaskStatus",
 ]

@@ -82,4 +82,17 @@ This document tracks technical decisions, architectural trade-offs, and known is
   `scouted` $\to$ `under_review` $\to$ `proceed` $\to$ `catchment_study` $\to$ `approved` | `rejected` (also `on_hold`).
 - **Audit Requirement:** Only BD Managers can advance or alter stages. A non-empty text justification (`reason`) is mandatory, and every move appends an immutable row to `property_stage_history`.
 
+---
+
+## Phase 4: Milestone 3, Catchment Study (Survey Operations)
+
+### 15. Catchment Study Operations & 6-Month Spatial Reuse Rule
+- **Decision:** Documented in `backend/app/studies/reuse.py`:
+  When a study is requested for a property, the system queries for any `COMPLETED` study whose covered geometry `ST_Contains` the property point (or is within 300 meters: `ST_DWithin(geom::geography, prop.location::geography, 300.0)`) AND whose `completed_at` is within the last 6 months (180 days).
+- **Behavior on Reuse:** If found, the system immediately links the request with `reused_from_request_id`, marks the study completed, copies the rolled-up insights, returns a human-readable justification to the UI (`"Reused study #study_xxx, covers this location, N days old"`), and triggers property re-evaluation without generating redundant tasks.
+- **Task Splitting & Workload Balancing:** When non-reused studies are planned, the system queries non-overlapping 500m grid cells within `radius_m` (default 1000m) of the target property point. Each task is weighted by building density (`workload_weight = 1.0 + (building_count * 0.1)`). An "Auto-assign" action greedily distributes tasks across active Survey Executives using Longest-Processing-Time first bin packing.
+- **Offline Resilience & Idempotent Sync:** Field surveyors capture lane data (10-min pedestrian counts, peak estimates, shop mix, competitors, lane width, parking, lighting, GPS, and photos) in a mobile-first form with continuous draft autosave to `localStorage`. Submissions include a client-generated `client_uuid` with a unique DB index, guaranteeing zero duplication on network reconnection or multiple sync retries.
+- **Automated Rollup & Property Re-evaluation:** Upon submission of the final remaining task in a study request, the backend automatically computes rolled-up footfall averages, competitor counts, shop mix distribution, and lane suitability. It marks the study completed and triggers a new property evaluation version (`"Updated after catchment study"`) replacing model estimates with ground-truth survey metrics.
+
+
 

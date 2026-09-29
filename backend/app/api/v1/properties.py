@@ -284,13 +284,15 @@ def get_property(
 
     # Check for potential duplicates nearby for the detail view
     dup_query = text("""
-        SELECT id, title, address, rent_monthly, area_sqft,
-               ST_Distance(location::geography, :loc::geography) as dist_meters
-        FROM properties
-        WHERE id != :prop_id
-          AND ST_DWithin(location::geography, :loc::geography, 50.0);
+        SELECT p2.id, p2.title, p2.address, p2.rent_monthly, p2.area_sqft,
+               ST_Distance(p2.location::geography, p1.location::geography) as dist_meters
+        FROM properties p1
+        CROSS JOIN properties p2
+        WHERE p1.id = :prop_id
+          AND p2.id != :prop_id
+          AND ST_DWithin(p2.location::geography, p1.location::geography, 50.0);
     """)
-    nearby_dups = db.execute(dup_query, {"loc": prop.location, "prop_id": prop.id}).fetchall()
+    nearby_dups = db.execute(dup_query, {"prop_id": prop.id}).fetchall()
     duplicate_warnings = [
         {
             "id": r[0],
@@ -305,7 +307,18 @@ def get_property(
 
     data = prop.to_dict()
     data["nearby_duplicates"] = duplicate_warnings
+
+    from app.db.models import StudyRequest
+    study = (
+        db.query(StudyRequest)
+        .filter(StudyRequest.property_id == prop.id)
+        .order_by(StudyRequest.created_at.desc())
+        .first()
+    )
+    data["catchment_study"] = study.to_dict(include_tasks=False) if study else None
+
     return data
+
 
 
 @router.post("/{property_id}/stage")

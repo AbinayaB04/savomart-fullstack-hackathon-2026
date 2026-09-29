@@ -44,6 +44,8 @@ yarn-error.log*
 data/raw/
 scripts/data/raw/
 backend/data/raw/
+backend/uploads/
+backend/app/uploads/
 
 # IDE / OS
 .DS_Store

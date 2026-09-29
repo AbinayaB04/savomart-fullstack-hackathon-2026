@@ -152,9 +152,27 @@ def evaluate_property_deterministic(prop: Property, db: Session) -> Dict[str, An
     benchmark_sqft, zone_name = get_rent_benchmark(lat, lon)
     surroundings = compute_property_surroundings(db, lat, lon, radius_meters=500.0)
 
+    # Check if this property has a completed catchment study with ground-truth survey data
+    from app.db.models import StudyRequest, StudyStatus
+    completed_study = (
+        db.query(StudyRequest)
+        .filter(StudyRequest.property_id == prop.id, StudyRequest.status == StudyStatus.COMPLETED)
+        .order_by(StudyRequest.completed_at.desc())
+        .first()
+    )
+    study_insights = completed_study.insights if (completed_study and completed_study.insights) else None
+
     insights: List[str] = []
     risks: List[str] = []
     confidence = EvaluationConfidence.HIGH.value
+
+    # If survey data exists, note the ground-truth validation
+    if study_insights:
+        peak_est = study_insights.get("avg_peak_hour_estimate", 0)
+        dom_hh = study_insights.get("dominant_household_type", "mixed")
+        comp_ct = study_insights.get("competitor_count", 0)
+        insights.append(f"Updated after catchment study: Ground survey verified peak footfall of {peak_est}/hr and {comp_ct} competitor stores in immediate lanes.")
+
 
     # ----------------------------------------------------
     # Factor 1: Commercial & Rent Feasibility (Weight 25)
@@ -263,17 +281,32 @@ def evaluate_property_deterministic(prop: Property, db: Session) -> Dict[str, An
     # ----------------------------------------------------
     res_count = surroundings["residential_count"]
     civic_count = surroundings["school_count"] + surroundings["hospital_count"] + surroundings["bus_count"]
-
-    res_norm = min(1.0, res_count / 40.0)
     civic_norm = min(1.0, civic_count / 10.0)
-    catchment_norm = round(0.7 * res_norm + 0.3 * civic_norm, 3)
-    catchment_points = round(20.0 * catchment_norm, 1)
-    catchment_why = f"{res_count} residential buildings and {civic_count} civic anchors within 500m."
 
-    if res_count >= 25:
-        insights.append(f"Dense residential pocket with {res_count} identified residential complexes within 500m.")
-    elif res_count <= 5:
-        risks.append("Low residential building count within 500m indicates sparser immediate household demand.")
+    if study_insights and study_insights.get("avg_peak_hour_estimate", 0) > 0:
+        peak_est = study_insights.get("avg_peak_hour_estimate", 0)
+        footfall_10m = study_insights.get("avg_footfall_10min", 0)
+        dom_hh = study_insights.get("dominant_household_type", "mixed")
+        # Direct ground footfall normalization (e.g. 400 peak/hr is top tier)
+        footfall_norm = min(1.0, max(0.25, peak_est / 400.0))
+        catchment_norm = round(0.75 * footfall_norm + 0.25 * civic_norm, 3)
+        catchment_points = round(20.0 * catchment_norm, 1)
+        catchment_why = f"Surveyed Ground Footfall: {footfall_10m}/10min (~{peak_est} peak/hr). Dominant household: {dom_hh.title()}."
+        catchment_is_mock = False
+        raw_catchment_val = peak_est
+    else:
+        res_norm = min(1.0, res_count / 40.0)
+        catchment_norm = round(0.7 * res_norm + 0.3 * civic_norm, 3)
+        catchment_points = round(20.0 * catchment_norm, 1)
+        catchment_why = f"{res_count} residential buildings and {civic_count} civic anchors within 500m."
+        catchment_is_mock = True
+        raw_catchment_val = res_count
+
+    if not study_insights:
+        if res_count >= 25:
+            insights.append(f"Dense residential pocket with {res_count} identified residential complexes within 500m.")
+        elif res_count <= 5:
+            risks.append("Low residential building count within 500m indicates sparser immediate household demand.")
 
     # ----------------------------------------------------
     # Factor 5: Competition & Cannibalisation (Weight 20)
@@ -281,6 +314,10 @@ def evaluate_property_deterministic(prop: Property, db: Session) -> Dict[str, An
     nearest_dist = surroundings["nearest_store_dist"]
     nearest_name = surroundings["nearest_store_name"] or "Savomart Store"
     total_comps = surroundings["total_competitors"]
+
+    if study_insights and study_insights.get("competitor_count") is not None:
+        survey_comps = study_insights.get("competitor_count", 0)
+        total_comps = max(total_comps, survey_comps)
 
     if nearest_dist < 450.0:
         cannib_score = 0.1
@@ -305,6 +342,8 @@ def evaluate_property_deterministic(prop: Property, db: Session) -> Dict[str, An
     comp_norm = round(0.6 * cannib_score + 0.4 * comp_score, 3)
     comp_points = round(20.0 * comp_norm, 1)
     comp_why = f"{int(nearest_dist)} m to nearest Savomart; {total_comps} competitor outlets within 500m."
+    if study_insights and study_insights.get("competitor_count") is not None:
+        comp_why += f" (Ground survey verified {study_insights.get('competitor_count')} competitors)"
 
     # Total score calculation
     total_score = round(rent_points + phys_points + access_points + catchment_points + comp_points, 1)
@@ -363,10 +402,11 @@ def evaluate_property_deterministic(prop: Property, db: Session) -> Dict[str, An
             "weight": 20,
             "normalised": catchment_norm,
             "points": catchment_points,
-            "unit": "buildings",
-            "raw_value": res_count,
+            "unit": "peak footfall/hr" if not catchment_is_mock else "buildings",
+            "raw_value": raw_catchment_val,
             "why": catchment_why,
-            "is_mock": True,
+            "is_mock": catchment_is_mock,
+            "survey_validated": not catchment_is_mock,
         },
         "competition": {
             "name": "Cannibalisation & Retail Buffer",
@@ -401,6 +441,11 @@ def evaluate_property_deterministic(prop: Property, db: Session) -> Dict[str, An
     # Generate narrative summary
     provider = get_llm_provider()
     summary_text, summary_src = provider.generate_narrative(facts_dict)
+    if study_insights:
+        summary_text = (
+            f"[Updated after catchment study] Ground survey verified {study_insights.get('avg_peak_hour_estimate', 0)} peak footfall/hr "
+            f"and {study_insights.get('competitor_count', 0)} competitors in surrounding lanes. " + summary_text
+        )
 
     return {
         "score": total_score,
@@ -413,4 +458,6 @@ def evaluate_property_deterministic(prop: Property, db: Session) -> Dict[str, An
         "summary_source": summary_src,
         "facts": facts_dict,
         "surroundings": surroundings,
+        "is_survey_updated": study_insights is not None,
+        "catchment_study_id": completed_study.id if completed_study else None,
     }
