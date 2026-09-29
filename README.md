@@ -1,73 +1,24 @@
 # Savo SiteScout: Chennai Retail Expansion Intelligence Platform
 
-[![Savomart Brand](https://img.shields.io/badge/Savomart-Purple_%23782B90-782B90?style=for-the-badge)](https://savomart.in)
-[![Savomart Accent](https://img.shields.io/badge/Accent-Yellow_%23FFF200-FFF200?style=for-the-badge&labelColor=782B90&color=FFF200)](https://savomart.in)
-[![PostGIS 16](https://img.shields.io/badge/Spatial_DB-PostGIS_16-blue?style=for-the-badge&logo=postgresql)](https://postgis.net/)
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
-[![React Vite](https://img.shields.io/badge/Frontend-React_18_+_Vite-61DAFB?style=for-the-badge&logo=react)](https://vitejs.dev/)
-[![Tests](https://img.shields.io/badge/Tests-11_Passed-brightgreen?style=for-the-badge)](https://pytest.org/)
-
 **Savo SiteScout** is a production-grade geospatial retail expansion intelligence platform custom-engineered for **Savomart** (grocery supermarket chain) in the **Chennai metropolitan region**.
 
 It integrates macro-market territory analysis, on-ground mobile property scouting, and micro-lane catchment surveys into a unified, deterministic decision pipeline.
 
 ---
 
+## Demonstration Video (3 to 5 Minutes)
+
+> **Google Drive Link:** [https://drive.google.com/file/d/1zryiAopUNhub8CDdK3GvugbgEJ2OaExN/view?usp=sharing](https://drive.google.com/file/d/1zryiAopUNhub8CDdK3GvugbgEJ2OaExN/view?usp=sharing)  
+> *(Sharing set to: "Anyone with the link can view")*  
+> Walkthrough covers: All 4 organizational personas, 1-click 6-month spatial reuse, offline mobile surveys, and automated Ground-Truth property re-evaluation.
+
+---
+
 ## System Architecture
 
-```mermaid
-flowchart TB
-    subgraph Client["Frontend Layer (React 18 + Vite + Tailwind CSS)"]
-        UI_BDM["BD Manager Workspace<br/>(Desktop Leaflet + Kanban Pipeline)"]
-        UI_BDE["BD Executive Portal<br/>(Mobile 3-Step Site Onboarding Wizard)"]
-        UI_SM["Survey Manager Hub<br/>(Desktop Grid Split & LPT Workload Dispatch)"]
-        UI_SE["Survey Executive App<br/>(Mobile Lane Survey + Offline Autosave)"]
-    end
-
-    subgraph Gateway["FastAPI Application Server (Python 3.12)"]
-        API_AUTH["Role Context & Auth Layer<br/>(X-User-Id Header Resolution)"]
-        API_ROUTERS["API Routers<br/>(/reports, /properties, /studies, /tasks)"]
-        
-        subgraph Engines["Deterministic Intelligence Subsystems"]
-            SC_AREA["Area Scoring Engine<br/>(PostGIS 6-Factor Deterministic Math)"]
-            SC_PROP["Property Scoring Engine<br/>(Commercial + 500m Buffer Spatial Metrics)"]
-            SR_REUSE["6-Month Spatial Reuse Resolver<br/>(ST_Contains / ST_DWithin 300m Window)"]
-            SR_SPLIT["Task Splitter & Bin Packer<br/>(LPT Workload-Balanced Auto-Assignment)"]
-            SR_ROLL["Survey Rollup & Re-evaluator<br/>(Property Version 2 Ground-Truth Engine)"]
-            LLM_GUARD["LLM Facts-Only & Validator<br/>(Strict Regex Number Whitelist + Template Fallback)"]
-        end
-    end
-
-    subgraph DataStore["PostgreSQL 16 + PostGIS Extension (SRID 4326)"]
-        DB_GRID["grid_cells (6,666 500m Cells)"]
-        DB_POI["pois (2,216 Chennai POIs across 9 Cats)"]
-        DB_STORE["stores (10 Savomart Operational Stores)"]
-        DB_REPORT["area_reports (Union Geometries & Hotspots)"]
-        DB_PROP["properties & property_photos"]
-        DB_EVAL["property_evaluations (v1, v2...)"]
-        DB_STAGE["property_stage_history (Audit Trail)"]
-        DB_STUDY["study_requests, survey_tasks, survey_responses"]
-        DB_GEO["geocode_cache & data_versions"]
-    end
-
-    subgraph External["External Data Sources & Integrations"]
-        OSM_OVERPASS["OpenStreetMap Overpass API<br/>(OSM POI Ingestion & Fallback)"]
-        OSM_NOMINATIM["OSM Nominatim Geocoder<br/>(Viewbox-Constrained Rate-Limited API)"]
-        SAVO_API["Savomart Internal Stores API<br/>(X-cron-token Endpoint)"]
-        LLM_EXT["LLM Provider<br/>(Gemini 2.5 / OpenAI / Anthropic)"]
-    end
-
-    UI_BDM & UI_BDE & UI_SM & UI_SE -->|REST JSON + FormData| API_AUTH
-    API_AUTH --> API_ROUTERS
-    API_ROUTERS --> SC_AREA & SC_PROP & SR_REUSE & SR_SPLIT & SR_ROLL
-    SC_AREA & SC_PROP --> LLM_GUARD
-    LLM_GUARD -.-> LLM_EXT
-    API_ROUTERS & SC_AREA & SC_PROP & SR_REUSE & SR_SPLIT & SR_ROLL --> DataStore
-    
-    OSM_OVERPASS -.-> DB_POI
-    SAVO_API -.-> DB_STORE
-    OSM_NOMINATIM -.-> DB_GEO
-```
+- **Frontend Client:** React 18 + Vite with Tailwind CSS, providing desktop Leaflet mapping for BD and Survey Managers alongside responsive mobile-optimized interfaces for field scouts and lane surveyors.
+- **Backend Application:** FastAPI (Python 3.12) REST API powering deterministic scoring engines, 6-month spatial reuse resolution, LPT workload bin-packing, and regex-validated LLM narratives.
+- **Geospatial Database:** PostgreSQL 16 with PostGIS extension (SRID 4326), indexing 6,666 pre-calculated 500m Chennai grid cells, 2,200+ OpenStreetMap POIs, and 10 Savomart operational store buffers.
 
 ---
 
@@ -533,6 +484,12 @@ tests/test_scoring.py::test_overall_evaluation_and_rating_bands PASSED
 
 ---
 
+## Design Decisions & Architectural Trade-offs
+
+A comprehensive Architecture Decision Record (ADR) detailing all 15 technical decisions and trade-offs is maintained in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+
+---
+
 ## Known Issues & Production Improvements
 
 1. **Overpass Public API Rate Limiting:** Public Overpass API instances occasionally return HTTP 429 during heavy queries. The ingestion script handles this with retry/backoff and cached fallback data in `data/raw/`.
@@ -544,14 +501,5 @@ tests/test_scoring.py::test_overall_evaluation_and_rating_bands PASSED
 ## AI Tooling & Governance
 
 - **AI Pair Programmer:** Google DeepMind Advanced Agentic Coding (`Antigravity IDE` / Gemini).
-- **Session Audit Trails:** Complete conversation transcripts, trajectory logs, and tool execution traces are documented in [`ai-sessions/Savo SiteScout Development Setup.md`](file:///d:/files/SAVOMart/savomart-fullstack-hackathon-2026/ai-sessions/Savo SiteScout Development Setup.md).
->>>>>>> 94bd661 (ai sessions transcripts and update readme architecture)
+- **Session Audit Trails:** Complete conversation transcripts, trajectory logs, and tool execution traces are documented in [`ai-sessions/Savo SiteScout Development Setup.md`](ai-sessions/Savo%20SiteScout%20Development%20Setup.md).
 
-
----
-
-## Demonstration Video (3 to 5 Minutes)
-
-> **Google Drive Link:** https://drive.google.com/file/d/1zryiAopUNhub8CDdK3GvugbgEJ2OaExN/view?usp=sharing
-
----
